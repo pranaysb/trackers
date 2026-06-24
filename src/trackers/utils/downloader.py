@@ -88,6 +88,19 @@ def _download_file(
 
 
 def _extract_zip(zip_path: Path, output_dir: Path) -> None:
-    """Extract a ZIP archive into `output_dir`."""
+    """Extract a ZIP archive into `output_dir` and prevent Zip Slip.
+
+    This function iterates through the members of the ZIP archive and ensures
+    that they will be extracted inside the target `output_dir`. It rejects
+    absolute paths and path traversals (Zip Slip vulnerability).
+    """
+    output_dir_resolved = output_dir.resolve()
     with zipfile.ZipFile(zip_path, "r") as zip_file:
-        zip_file.extractall(output_dir)
+        for member in zip_file.namelist():
+            target_path = (output_dir_resolved / Path(member)).resolve()
+            try:
+                target_path.relative_to(output_dir_resolved)
+            except ValueError:
+                raise ValueError(f"Zip Slip vulnerability detected: unsafe path in zip member '{member}'") from None
+
+        zip_file.extractall(output_dir_resolved)
